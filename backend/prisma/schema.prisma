@@ -1,0 +1,94 @@
+// HookRelay 스키마 — foundation: 테넌트·API 키·수신 endpoint·구독
+// 설계 원칙: 원문 비밀값은 저장하지 않는다(키는 해시, 시크릿은 AES-GCM 암호문).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum TenantPlan {
+  FREE
+  PRO
+}
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+model Tenant {
+  id        String       @id @default(uuid()) @db.Uuid
+  name      String       @unique @db.VarChar(100)
+  plan      TenantPlan   @default(FREE)
+  status    TenantStatus @default(ACTIVE)
+  createdAt DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  apiKeys   ApiKey[]
+  endpoints Endpoint[]
+
+  @@map("tenants")
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  GRACE
+  REVOKED
+}
+
+model ApiKey {
+  id       String       @id @default(uuid()) @db.Uuid
+  tenantId String       @map("tenant_id") @db.Uuid
+  tenant   Tenant       @relation(fields: [tenantId], references: [id])
+  // 원문 미저장 — SHA-256 hex. 발급 응답에서 단 한 번만 노출된다.
+  keyHash  String       @unique @map("key_hash") @db.Char(64)
+  last4    String       @db.Char(4)
+  status   ApiKeyStatus @default(ACTIVE)
+  // GRACE 키의 만료 시각 — 회전 후 24시간 유예
+  expiresAt DateTime?   @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([tenantId])
+  @@map("api_keys")
+}
+
+enum EndpointStatus {
+  ACTIVE
+  DISABLED_AUTO
+  DISABLED_MANUAL
+}
+
+model Endpoint {
+  id       String         @id @default(uuid()) @db.Uuid
+  tenantId String         @map("tenant_id") @db.Uuid
+  tenant   Tenant         @relation(fields: [tenantId], references: [id])
+  url      String         @db.VarChar(500)
+  // HMAC 서명 시크릿 — AES-256-GCM 앱 레벨 암호화(v1:iv:tag:data). 마스터 키는 환경변수.
+  secretEnc String        @map("secret_enc") @db.VarChar(300)
+  status   EndpointStatus @default(ACTIVE)
+  description String?     @db.VarChar(200)
+  // 서킷 브레이커·자동 비활성화 판단용 (배달 단계에서 갱신)
+  consecutiveFailures Int @default(0) @map("consecutive_failures")
+  createdAt DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  subscriptions Subscription[]
+
+  @@unique([tenantId, url])
+  @@index([tenantId])
+  @@map("endpoints")
+}
+
+model Subscription {
+  id         BigInt   @id @default(autoincrement())
+  endpointId String   @map("endpoint_id") @db.Uuid
+  endpoint   Endpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  // 점 표기 이벤트 타입 — 'order.created'
+  eventType  String   @map("event_type") @db.VarChar(100)
+
+  @@unique([endpointId, eventType])
+  @@map("subscriptions")
+}
