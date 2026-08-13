@@ -27,6 +27,16 @@ class EnvSchema {
   @Transform(({ value }) => parseInt(String(value), 10))
   @IsInt()
   PORT: number = 3000;
+
+  /** BullMQ가 사용하는 Redis — API 서버는 큐를 만지지 않으므로 Relay/Worker만 연결한다 */
+  @IsString()
+  @IsNotEmpty()
+  REDIS_URL!: string;
+
+  /** outbox 폴링 주기(ms) — 배달 지연의 상한을 결정한다 */
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_OUTBOX_POLL_MS: number = 500;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvSchema {

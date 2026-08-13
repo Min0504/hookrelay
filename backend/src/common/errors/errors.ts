@@ -28,4 +28,19 @@ export const Errors = {
     new DomainException(400, 'INVALID_EVENT_TYPE', `이벤트 타입 형식이 올바르지 않습니다: ${value}`, {
       value,
     }),
+
+  // events
+  idempotencyKeyRequired: (): DomainException =>
+    new DomainException(400, 'IDEMPOTENCY_KEY_REQUIRED', 'Idempotency-Key 헤더가 필요합니다.'),
+  duplicateEvent: (eventId: string): DomainException =>
+    new DomainException(409, 'DUPLICATE_EVENT', '같은 멱등성 키로 이미 발행된 이벤트가 있습니다.', {
+      eventId,
+    }),
+  payloadTooLarge: (sizeBytes: number, limitBytes: number): DomainException =>
+    new DomainException(413, 'PAYLOAD_TOO_LARGE', 'payload가 허용 크기를 초과했습니다.', {
+      sizeBytes,
+      limitBytes,
+    }),
+  eventNotFound: (): DomainException =>
+    new DomainException(404, 'EVENT_NOT_FOUND', '이벤트를 찾을 수 없습니다.'),
 } as const;

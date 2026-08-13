@@ -5,6 +5,7 @@ import { ApiKeysModule } from './api-keys/api-keys.module';
 import { validateEnv } from './common/config/env.validation';
 import { PrismaModule } from './common/prisma/prisma.module';
 import { EndpointsModule } from './endpoints/endpoints.module';
+import { EventsModule } from './events/events.module';
 import { TenantsModule } from './tenants/tenants.module';
 
 @Module({
@@ -27,6 +28,7 @@ import { TenantsModule } from './tenants/tenants.module';
     TenantsModule,
     ApiKeysModule,
     EndpointsModule,
+    EventsModule,
   ],
 })
 export class AppModule {}

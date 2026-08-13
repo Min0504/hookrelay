@@ -29,6 +29,7 @@ model Tenant {
 
   apiKeys   ApiKey[]
   endpoints Endpoint[]
+  events    Event[]
 
   @@map("tenants")
 }
@@ -76,6 +77,7 @@ model Endpoint {
   updatedAt DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   subscriptions Subscription[]
+  deliveries    Delivery[]
 
   @@unique([tenantId, url])
   @@index([tenantId])
@@ -91,4 +93,73 @@ model Subscription {
 
   @@unique([endpointId, eventType])
   @@map("subscriptions")
+}
+
+// ── 이벤트 발행 · Transactional Outbox ──────────────────────────────
+// events / deliveries / outbox는 발행 API의 "같은 트랜잭션"에서 함께 쓰인다.
+// DB 커밋 = 배달 예약 확정. 큐(Redis)는 이 기록의 파생물일 뿐이다.
+
+// 발행된 이벤트 — 불변. id는 수신자에게도 노출되는 배달 멱등성의 근거.
+model Event {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  tenant         Tenant   @relation(fields: [tenantId], references: [id])
+  type           String   @db.VarChar(100)
+  payload        Json     @db.JsonB
+  // 발행 멱등성 — 같은 (tenant, key) 재시도는 409 + 기존 eventId 반환
+  idempotencyKey String   @map("idempotency_key") @db.VarChar(255)
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  deliveries Delivery[]
+  outbox     OutboxMessage[]
+
+  @@unique([tenantId, idempotencyKey])
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@map("events")
+}
+
+enum OutboxStatus {
+  PENDING
+  PUBLISHED
+}
+
+// 발행-적재 원자성의 핵심 — events와 같은 트랜잭션으로 INSERT되고,
+// Relay가 PENDING 행을 폴링해 큐 적재 후 PUBLISHED로 마킹한다.
+// 부분 인덱스 (id) WHERE status='PENDING'은 마이그레이션 SQL에서 직접 생성.
+model OutboxMessage {
+  id          BigInt       @id @default(autoincrement())
+  eventId     String       @map("event_id") @db.Uuid
+  event       Event        @relation(fields: [eventId], references: [id])
+  status      OutboxStatus @default(PENDING)
+  publishedAt DateTime?    @map("published_at") @db.Timestamptz(6)
+  createdAt   DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("outbox")
+}
+
+enum DeliveryStatus {
+  PENDING
+  SUCCEEDED
+  FAILED_RETRYING
+  DEAD
+}
+
+// 이벤트 × endpoint 배달 단위 — id가 X-Delivery-Id로 전달되는 소비자 멱등성 키.
+model Delivery {
+  id           String         @id @default(uuid()) @db.Uuid
+  eventId      String         @map("event_id") @db.Uuid
+  event        Event          @relation(fields: [eventId], references: [id])
+  endpointId   String         @map("endpoint_id") @db.Uuid
+  endpoint     Endpoint       @relation(fields: [endpointId], references: [id])
+  status       DeliveryStatus @default(PENDING)
+  attemptCount Int            @default(0) @map("attempt_count")
+  // 조회용 스냅샷 — 실제 재시도 스케줄은 BullMQ 지연 잡이 담당
+  nextRetryAt  DateTime?      @map("next_retry_at") @db.Timestamptz(6)
+  createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  // 팬아웃 중복 생성 차단
+  @@unique([eventId, endpointId])
+  @@index([endpointId, status])
+  @@map("deliveries")
 }
