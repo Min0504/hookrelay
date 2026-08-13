@@ -1,0 +1,25 @@
+# 로컬 개발용 인프라 — 애플리케이션은 호스트에서 직접 실행
+services:
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - '55434:5432'
+    environment:
+      POSTGRES_USER: hookrelay
+      POSTGRES_PASSWORD: hookrelay
+      POSTGRES_DB: hookrelay
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U hookrelay']
+      interval: 3s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - '63790:6379'
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 3s
+      timeout: 3s
+      retries: 10

@@ -1,0 +1,13 @@
+# ── Node
+node_modules/
+dist/
+coverage/
+
+# ── 로컬 환경
+.env
+*.local
+
+# ── IDE / OS
+.idea/
+.vscode/
+.DS_Store
