@@ -35,6 +35,9 @@ export async function createTestApp(env: Record<string, string> = {}): Promise<T
   process.env.HR_SECRET_KEY = randomBytes(32).toString('base64');
   process.env.HR_ALLOW_INSECURE_HTTP = 'false';
   process.env.HR_ALLOW_PRIVATE_DESTINATIONS = 'false';
+  // API 서버는 Redis에 연결하지 않는다(outbox까지만 쓴다) — env 검증 통과용 기본값.
+  // Relay 테스트는 Testcontainers Redis URL로 덮어쓴다.
+  process.env.REDIS_URL ??= 'redis://localhost:63790';
   Object.assign(process.env, env);
 
   // AppModule은 반드시 env 세팅 "이후"에 로드한다.
