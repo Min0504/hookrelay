@@ -37,6 +37,16 @@ class EnvSchema {
   @Transform(({ value }) => parseInt(String(value), 10))
   @IsInt()
   HR_OUTBOX_POLL_MS: number = 500;
+
+  /** 배달 HTTP 타임아웃(ms) — 초과 시 실패(TIMEOUT)로 분류 */
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_DELIVERY_TIMEOUT_MS: number = 10_000;
+
+  /** 워커 프로세스당 동시 배달 수 — I/O 바운드라 수십까지 상향 가능 */
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_WORKER_CONCURRENCY: number = 10;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvSchema {

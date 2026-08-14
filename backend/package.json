@@ -13,6 +13,8 @@
     "start:prod": "node dist/main",
     "start:relay": "node dist/relay/main",
     "start:relay:dev": "nest start --entryFile relay/main --watch",
+    "start:worker": "node dist/worker/main",
+    "start:worker:dev": "nest start --entryFile worker/main --watch",
     "test": "jest",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "prisma:generate": "prisma generate",
@@ -32,7 +34,8 @@
     "pino": "^9.6.0",
     "pino-http": "^10.4.0",
     "reflect-metadata": "^0.2.2",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "undici": "^8.10.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.20.0",
