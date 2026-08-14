@@ -46,7 +46,9 @@ describe('Delivery Worker', () => {
       req.on('data', (c: Buffer) => chunks.push(c));
       req.on('end', () => {
         const rawBody = Buffer.concat(chunks).toString('utf8');
-        received.push({ path: req.url ?? '', headers: req.headers, rawBody });
+        if (req.headers['user-agent'] === 'HookRelay/1.0') {
+          received.push({ path: req.url ?? '', headers: req.headers, rawBody });
+        }
         if (req.url === '/fail-500') {
           res.writeHead(500, { 'content-type': 'application/json' });
           res.end('{"error":"receiver exploded"}');

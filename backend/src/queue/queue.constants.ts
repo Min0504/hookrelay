@@ -7,6 +7,7 @@ export const DELIVERY_QUEUE = 'delivery';
 /** BullMQ 잡 페이로드 — 배달에 필요한 나머지는 워커가 DB에서 읽는다(진실의 원천은 DB). */
 export interface DeliveryJobData {
   deliveryId: string;
+  tenantId?: string;
 }
 
 /**

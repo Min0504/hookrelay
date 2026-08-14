@@ -57,7 +57,7 @@ export class RelayService implements OnApplicationShutdown {
       where: { status: 'PENDING' },
       orderBy: { id: 'asc' },
       take: batchSize,
-      include: { event: { select: { deliveries: { select: { id: true } } } } },
+      include: { event: { select: { tenantId: true, deliveries: { select: { id: true } } } } },
     });
     if (batch.length === 0) return 0;
 
@@ -67,7 +67,7 @@ export class RelayService implements OnApplicationShutdown {
         await this.queue.addBulk(
           this.targetsOf(message).map((deliveryId) => ({
             name: 'deliver',
-            data: { deliveryId },
+            data: { deliveryId, tenantId: message.event.tenantId },
             opts: {
               jobId: message.deliveryId
                 ? deliveryJobId(deliveryId, `obx-${message.id}`)
@@ -97,7 +97,10 @@ export class RelayService implements OnApplicationShutdown {
   }
 
   /** 최초 발행은 이벤트 팬아웃, 재배달/ping은 지정된 배달 한 건만. */
-  private targetsOf(message: { deliveryId: string | null; event: { deliveries: { id: string }[] } }): string[] {
+  private targetsOf(message: {
+    deliveryId: string | null;
+    event: { tenantId: string; deliveries: { id: string }[] };
+  }): string[] {
     if (message.deliveryId) return [message.deliveryId];
     return message.event.deliveries.map((d) => d.id);
   }
