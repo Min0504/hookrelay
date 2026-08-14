@@ -30,7 +30,9 @@ describe('Retry / DLQ / redeliver', () => {
       const chunks: Buffer[] = [];
       req.on('data', (c: Buffer) => chunks.push(c));
       req.on('end', () => {
-        received.push(req.url ?? '');
+        if (req.headers['user-agent'] === 'HookRelay/1.0') {
+          received.push(req.url ?? '');
+        }
         if (req.url === '/fail') {
           res.writeHead(500);
           res.end('down');
