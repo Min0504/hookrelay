@@ -1,0 +1,162 @@
+# HookRelay 전체 스택 — API·Relay·Worker·콘솔·관측·데모 수신자
+# 사용: docker compose up --build
+# 워커만 늘리기: docker compose up -d --scale worker=3  (prometheus는 worker 1대만 스크레이프)
+
+name: hookrelay
+
+x-backend-env: &backend-env
+  DATABASE_URL: postgresql://hookrelay:hookrelay@postgres:5432/hookrelay
+  REDIS_URL: redis://redis:6379
+  HR_ADMIN_KEY: dev-admin-key-change-me
+  HR_SECRET_KEY: 3W9lJ4vGml7C0S3M0Yl8mB6t1IhU4d0T9S8kR2c5x6A=
+  HR_ALLOW_INSECURE_HTTP: 'true'
+  HR_ALLOW_PRIVATE_DESTINATIONS: 'true'
+  HR_OUTBOX_POLL_MS: '500'
+  HR_DELIVERY_TIMEOUT_MS: '10000'
+  HR_WORKER_CONCURRENCY: '10'
+  HR_TENANT_CONCURRENCY: ${HR_TENANT_CONCURRENCY:-3}
+  HR_CIRCUIT_OPEN_AFTER: '10'
+  HR_CIRCUIT_COOLDOWN_MS: '300000'
+  HR_CIRCUIT_DISABLE_AFTER: '50'
+  HR_RATE_LIMIT_FREE_PER_MIN: '10000'
+  HR_RATE_LIMIT_PRO_PER_MIN: '100000'
+  HR_RETRY_BASE_MS: '30000'
+  HR_RETRY_CAP_MS: '14400000'
+  HR_MAX_ATTEMPTS: '8'
+  NODE_ENV: production
+  LOG_LEVEL: info
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: hookrelay
+      POSTGRES_PASSWORD: hookrelay
+      POSTGRES_DB: hookrelay
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U hookrelay']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ./backend
+    environment:
+      <<: *backend-env
+      PORT: '3000'
+    command: ['sh', '-c', 'npx prisma migrate deploy && node dist/main.js']
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/metrics').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - '3000'
+    ports:
+      - '3000:3000'
+
+  relay:
+    build:
+      context: ./backend
+    environment:
+      <<: *backend-env
+      HR_METRICS_PORT: '9092'
+    command: ['node', 'dist/relay/main.js']
+    depends_on:
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - '9092'
+
+  worker:
+    build:
+      context: ./backend
+    environment:
+      <<: *backend-env
+      HR_METRICS_PORT: '9091'
+    command: ['node', 'dist/worker/main.js']
+    depends_on:
+      api:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    expose:
+      - '9091'
+
+  demo-receiver:
+    build:
+      context: ./demo-receiver
+    environment:
+      PORT: '4100'
+    expose:
+      - '4100'
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    volumes:
+      - ./ops/prometheus.compose.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - '9090:9090'
+    depends_on:
+      - api
+      - worker
+      - relay
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: 'true'
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./ops/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports:
+      - '3001:3000'
+    depends_on:
+      - prometheus
+
+  web:
+    build:
+      context: ./frontend
+    ports:
+      - '8080:80'
+    depends_on:
+      - api
+      - demo-receiver
+
+volumes:
+  pgdata:

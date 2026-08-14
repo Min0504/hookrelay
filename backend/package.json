@@ -18,7 +18,8 @@
     "test": "jest",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate dev"
+    "prisma:migrate": "prisma migrate dev",
+    "purge:attempts": "npx ts-node --transpile-only src/jobs/purge-attempts.ts"
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
