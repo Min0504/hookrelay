@@ -1,0 +1,25 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: hookrelay-api
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['api:3000']
+        labels:
+          component: api
+
+  - job_name: hookrelay-worker
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['worker:9091']
+        labels:
+          component: worker
+
+  - job_name: hookrelay-relay
+    metrics_path: /metrics
+    static_configs:
+      - targets: ['relay:9092']
+        labels:
+          component: relay

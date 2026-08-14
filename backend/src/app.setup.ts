@@ -13,5 +13,7 @@ export function setupApp(app: INestApplication): INestApplication {
   );
   app.useGlobalFilters(new GlobalExceptionFilter());
   app.useGlobalInterceptors(new HttpMetricsInterceptor());
+  // 콘솔은 nginx 같은 오리진이 기본. Vite 개발(:5173)만 CORS가 필요하다.
+  app.enableCors({ origin: true });
   return app;
 }

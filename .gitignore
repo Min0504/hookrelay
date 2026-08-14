@@ -6,6 +6,8 @@ coverage/
 # ── 로컬 환경
 .env
 *.local
+bench/out/seed.env
+bench/out/*.txt
 
 # ── IDE / OS
 .idea/

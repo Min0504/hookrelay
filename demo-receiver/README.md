@@ -24,4 +24,8 @@ WEBHOOK_SECRET=whsec_... npm start   # 기본 포트 4100
 ## 엔드포인트
 
 - `POST /hooks` — 웹훅 수신 (검증 실패 시 400/401)
-- `GET /received` — 지금까지 받은 배달 목록 (데모 확인용)
+- `POST /hooks/fail` — HMAC 통과 후 500 (카오스·DLQ 시드)
+- `POST /hooks/slow` — HMAC 통과 후 800ms 지연 (noisy neighbor)
+- `POST /config` `{ "secret" }` — 런타임에 검증 키 추가 (콘솔·k6 시드)
+- `GET /stream` — 수신 SSE (라이브 데모)
+- `GET /received` — 지금까지 받은 배달 목록
