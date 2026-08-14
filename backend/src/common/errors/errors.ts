@@ -41,6 +41,10 @@ export const Errors = {
       sizeBytes,
       limitBytes,
     }),
+  rateLimited: (retryAfterSec: number): DomainException =>
+    new DomainException(429, 'RATE_LIMITED', '발행 한도를 초과했습니다. Retry-After 후에 다시 시도하세요.', {
+      retryAfterSec,
+    }),
   eventNotFound: (): DomainException =>
     new DomainException(404, 'EVENT_NOT_FOUND', '이벤트를 찾을 수 없습니다.'),
   deliveryNotFound: (): DomainException =>

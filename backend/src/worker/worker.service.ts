@@ -2,7 +2,10 @@ import { Inject, Injectable, Logger, OnApplicationShutdown } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import { DelayedError, Queue, Worker } from 'bullmq';
 import Redis from 'ioredis';
+import * as http from 'http';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { startMetricsServer } from '../metrics/metrics.server';
+import { labelComponent, queueJobs, tenantLimiterDeferredTotal } from '../metrics/registry';
 import { DELIVERY_QUEUE, DeliveryJobData } from '../queue/queue.constants';
 import { redisConnectionFromUrl } from '../queue/redis-connection';
 import { DELIVERY_QUEUE_TOKEN } from '../relay/relay.service';
@@ -23,6 +26,8 @@ export class WorkerService implements OnApplicationShutdown {
   private worker: Worker<DeliveryJobData> | null = null;
   private readonly policy: RetryPolicy;
   private readonly tenantRetryMs: number;
+  private metricsServer: http.Server | null = null;
+  private queueSampleTimer: NodeJS.Timeout | null = null;
 
   constructor(
     private readonly processor: DeliveryProcessor,
@@ -42,6 +47,15 @@ export class WorkerService implements OnApplicationShutdown {
 
   start(): void {
     const concurrency = this.config.get<number>('HR_WORKER_CONCURRENCY', 10);
+    const metricsPort = this.config.get<number>('HR_METRICS_PORT', 0);
+    if (metricsPort > 0) {
+      labelComponent('worker');
+      this.metricsServer = startMetricsServer(metricsPort, 'worker');
+    }
+    this.queueSampleTimer = setInterval(() => {
+      void this.sampleQueue();
+    }, 2_000);
+
     this.worker = new Worker<DeliveryJobData>(
       DELIVERY_QUEUE,
       async (job) => {
@@ -57,6 +71,7 @@ export class WorkerService implements OnApplicationShutdown {
 
         const acquired = await this.limiter.acquire(tenantId);
         if (!acquired) {
+          tenantLimiterDeferredTotal.inc();
           await job.moveToDelayed(Date.now() + this.tenantRetryMs, job.token);
           throw new DelayedError();
         }
@@ -95,7 +110,27 @@ export class WorkerService implements OnApplicationShutdown {
     );
   }
 
+  private async sampleQueue(): Promise<void> {
+    try {
+      const counts = await this.queue.getJobCounts('wait', 'active', 'delayed', 'failed');
+      queueJobs.set({ state: 'wait' }, counts.wait ?? 0);
+      queueJobs.set({ state: 'active' }, counts.active ?? 0);
+      queueJobs.set({ state: 'delayed' }, counts.delayed ?? 0);
+      queueJobs.set({ state: 'failed' }, counts.failed ?? 0);
+    } catch {
+      /* 스크레이프 공백은 다음 주기에서 메워진다 */
+    }
+  }
+
   async onApplicationShutdown(): Promise<void> {
+    if (this.queueSampleTimer) clearInterval(this.queueSampleTimer);
+    await new Promise<void>((resolve) => {
+      if (!this.metricsServer) {
+        resolve();
+        return;
+      }
+      this.metricsServer.close(() => resolve());
+    });
     await this.worker?.close();
     await this.queue.close();
     this.redis.disconnect();

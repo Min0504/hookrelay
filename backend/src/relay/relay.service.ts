@@ -1,7 +1,10 @@
 import { Inject, Injectable, Logger, OnApplicationShutdown } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Queue } from 'bullmq';
+import * as http from 'http';
 import { PrismaService } from '../common/prisma/prisma.service';
+import { startMetricsServer } from '../metrics/metrics.server';
+import { labelComponent, outboxPending, outboxPublishedTotal } from '../metrics/registry';
 import { DeliveryJobData, deliveryJobId } from '../queue/queue.constants';
 
 export const DELIVERY_QUEUE_TOKEN = Symbol('DELIVERY_QUEUE');
@@ -19,6 +22,7 @@ export class RelayService implements OnApplicationShutdown {
   private readonly logger = new Logger(RelayService.name);
   private timer: NodeJS.Timeout | null = null;
   private ticking = false;
+  private metricsServer: http.Server | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -29,6 +33,11 @@ export class RelayService implements OnApplicationShutdown {
   /** 폴링 루프 시작 — 이전 틱이 끝나지 않았으면 건너뛰어 틱 중첩을 막는다. */
   start(): void {
     const intervalMs = this.config.get<number>('HR_OUTBOX_POLL_MS', 500);
+    const metricsPort = this.config.get<number>('HR_METRICS_PORT', 0);
+    if (metricsPort > 0) {
+      labelComponent('relay');
+      this.metricsServer = startMetricsServer(metricsPort, 'relay');
+    }
     this.timer = setInterval(() => {
       if (this.ticking) return;
       this.ticking = true;
@@ -93,6 +102,9 @@ export class RelayService implements OnApplicationShutdown {
       where: { id: { in: publishedIds }, status: 'PENDING' },
       data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
+    outboxPublishedTotal.inc(publishedIds.length);
+    const pending = await this.prisma.outboxMessage.count({ where: { status: 'PENDING' } });
+    outboxPending.set(pending);
     return publishedIds.length;
   }
 
@@ -107,6 +119,13 @@ export class RelayService implements OnApplicationShutdown {
 
   async onApplicationShutdown(): Promise<void> {
     if (this.timer) clearInterval(this.timer);
+    await new Promise<void>((resolve) => {
+      if (!this.metricsServer) {
+        resolve();
+        return;
+      }
+      this.metricsServer.close(() => resolve());
+    });
     await this.queue.close();
   }
 }

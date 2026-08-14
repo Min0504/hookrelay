@@ -14,6 +14,10 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const res = host.switchToHttp().getResponse<Response>();
 
     if (exception instanceof DomainException) {
+      const retryAfter = exception.details?.retryAfterSec;
+      if (typeof retryAfter === 'number') {
+        res.setHeader('Retry-After', String(retryAfter));
+      }
       res.status(exception.getStatus()).json(exception.getResponse());
       return;
     }

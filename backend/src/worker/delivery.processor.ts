@@ -2,6 +2,12 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AttemptErrorClass, Prisma } from '@prisma/client';
 import { PrismaService } from '../common/prisma/prisma.service';
+import {
+  circuitOpenTotal,
+  deliveriesTotal,
+  deliveryDuration,
+  deliveryErrorsTotal,
+} from '../metrics/registry';
 import { CircuitStore } from './circuit.store';
 import { DeliveryHttpClient } from './delivery-http.client';
 import { EndpointCache } from './endpoint-cache';
@@ -52,15 +58,23 @@ export class DeliveryProcessor {
     });
     if (!delivery) {
       this.logger.warn(`존재하지 않는 배달 잡 수신: ${deliveryId}`);
+      deliveriesTotal.inc({ result: 'SKIPPED_MISSING' });
       return 'SKIPPED_MISSING';
     }
     if (delivery.status === 'SUCCEEDED' || delivery.status === 'DEAD') {
+      deliveriesTotal.inc({ result: 'SKIPPED_ALREADY_DONE' });
       return 'SKIPPED_ALREADY_DONE';
     }
 
     const endpoint = await this.endpointCache.get(delivery.endpointId);
-    if (!endpoint) return 'SKIPPED_MISSING';
-    if (endpoint.status !== 'ACTIVE') return 'SKIPPED_ENDPOINT_INACTIVE';
+    if (!endpoint) {
+      deliveriesTotal.inc({ result: 'SKIPPED_MISSING' });
+      return 'SKIPPED_MISSING';
+    }
+    if (endpoint.status !== 'ACTIVE') {
+      deliveriesTotal.inc({ result: 'SKIPPED_ENDPOINT_INACTIVE' });
+      return 'SKIPPED_ENDPOINT_INACTIVE';
+    }
 
     const body = JSON.stringify({
       eventId: delivery.event.id,
@@ -78,10 +92,16 @@ export class DeliveryProcessor {
 
     const attemptNo = delivery.attemptCount + 1;
     const claimed = await this.claim(delivery.id, attemptNo, digestHeaders(headers));
-    if (claimed === 'duplicate') return 'SKIPPED_DUPLICATE_CLAIM';
+    if (claimed === 'duplicate') {
+      deliveriesTotal.inc({ result: 'SKIPPED_DUPLICATE_CLAIM' });
+      return 'SKIPPED_DUPLICATE_CLAIM';
+    }
 
     const allowed = await this.circuit.allow(delivery.endpointId);
     if (!allowed) {
+      circuitOpenTotal.inc();
+      deliveriesTotal.inc({ result: 'CIRCUIT_OPEN' });
+      deliveryErrorsTotal.inc({ error_class: AttemptErrorClass.CIRCUIT_OPEN });
       return this.finishFailure(delivery.id, claimed, attemptNo, {
         errorClass: AttemptErrorClass.CIRCUIT_OPEN,
         bodyHead: 'circuit open — HTTP skipped',
@@ -90,6 +110,7 @@ export class DeliveryProcessor {
     }
 
     const outcome = await this.httpClient.send(endpoint.url, headers, body, this.timeoutMs);
+    deliveryDuration.observe(outcome.durationMs / 1000);
 
     await this.prisma.deliveryAttempt.update({
       where: { id: claimed },
@@ -111,8 +132,11 @@ export class DeliveryProcessor {
         where: { id: delivery.id },
         data: { status: 'SUCCEEDED', attemptCount: attemptNo, nextRetryAt: null },
       });
+      deliveriesTotal.inc({ result: 'SUCCEEDED' });
       return 'SUCCEEDED';
     }
+
+    deliveryErrorsTotal.inc({ error_class: outcome.errorClass });
 
     const { disable } = await this.circuit.failure(delivery.endpointId);
     await this.prisma.endpoint.update({
@@ -129,6 +153,7 @@ export class DeliveryProcessor {
       where: { id: delivery.id },
       data: { status: dead ? 'DEAD' : 'FAILED_RETRYING', attemptCount: attemptNo },
     });
+    deliveriesTotal.inc({ result: dead ? 'DEAD' : 'FAILED' });
     return dead ? 'DEAD' : 'FAILED';
   }
 
