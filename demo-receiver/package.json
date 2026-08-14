@@ -1,0 +1,13 @@
+{
+  "name": "hookrelay-demo-receiver",
+  "version": "1.0.0",
+  "description": "HookRelay 수신자 모범 구현 — HMAC 검증 + X-Delivery-Id 멱등 소비",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
