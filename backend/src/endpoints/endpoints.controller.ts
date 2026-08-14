@@ -41,4 +41,9 @@ export class EndpointsController {
   ) {
     return this.endpoints.setSubscriptions(tenant.id, id, dto.eventTypes);
   }
+
+  @Post(':id/ping')
+  ping(@CurrentTenant() tenant: AuthenticatedTenant, @Param('id', ParseUUIDPipe) id: string) {
+    return this.endpoints.ping(tenant.id, id);
+  }
 }

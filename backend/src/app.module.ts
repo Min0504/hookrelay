@@ -4,6 +4,7 @@ import { LoggerModule } from 'nestjs-pino';
 import { ApiKeysModule } from './api-keys/api-keys.module';
 import { validateEnv } from './common/config/env.validation';
 import { PrismaModule } from './common/prisma/prisma.module';
+import { DeliveriesModule } from './deliveries/deliveries.module';
 import { EndpointsModule } from './endpoints/endpoints.module';
 import { EventsModule } from './events/events.module';
 import { TenantsModule } from './tenants/tenants.module';
@@ -29,6 +30,7 @@ import { TenantsModule } from './tenants/tenants.module';
     ApiKeysModule,
     EndpointsModule,
     EventsModule,
+    DeliveriesModule,
   ],
 })
 export class AppModule {}

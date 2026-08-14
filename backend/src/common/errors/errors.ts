@@ -43,4 +43,8 @@ export const Errors = {
     }),
   eventNotFound: (): DomainException =>
     new DomainException(404, 'EVENT_NOT_FOUND', '이벤트를 찾을 수 없습니다.'),
+  deliveryNotFound: (): DomainException =>
+    new DomainException(404, 'DELIVERY_NOT_FOUND', '배달을 찾을 수 없습니다.'),
+  invalidCursor: (): DomainException =>
+    new DomainException(400, 'INVALID_CURSOR', '커서 형식이 올바르지 않습니다.'),
 } as const;
