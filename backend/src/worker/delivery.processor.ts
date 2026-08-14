@@ -9,6 +9,7 @@ import { buildDeliveryHeaders, digestHeaders, signDeliveryBody } from './signatu
 export type ProcessResult =
   | 'SUCCEEDED'
   | 'FAILED'
+  | 'DEAD'
   | 'SKIPPED_ALREADY_DONE'
   | 'SKIPPED_ENDPOINT_INACTIVE'
   | 'SKIPPED_DUPLICATE_CLAIM'
@@ -29,6 +30,7 @@ export type ProcessResult =
 export class DeliveryProcessor {
   private readonly logger = new Logger(DeliveryProcessor.name);
   private readonly timeoutMs: number;
+  private readonly maxAttempts: number;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -37,6 +39,7 @@ export class DeliveryProcessor {
     config: ConfigService,
   ) {
     this.timeoutMs = config.get<number>('HR_DELIVERY_TIMEOUT_MS', 10_000);
+    this.maxAttempts = config.get<number>('HR_MAX_ATTEMPTS', 8);
   }
 
   async process(deliveryId: string): Promise<ProcessResult> {
@@ -110,16 +113,20 @@ export class DeliveryProcessor {
     if (outcome.ok) {
       await this.prisma.delivery.update({
         where: { id: delivery.id },
-        data: { status: 'SUCCEEDED', attemptCount: attemptNo },
+        data: { status: 'SUCCEEDED', attemptCount: attemptNo, nextRetryAt: null },
       });
       return 'SUCCEEDED';
     }
 
-    // 재시도 스케줄(백오프·DEAD 전이)은 다음 단계의 영역 — 여기서는 사실만 기록한다
+    // 최대 시도에 도달하면 DEAD(DLQ). 이후의 자동 재시도는 없고, 사람이 재배달 API로만 살린다.
+    const dead = attemptNo >= this.maxAttempts;
     await this.prisma.delivery.update({
       where: { id: delivery.id },
-      data: { status: 'FAILED_RETRYING', attemptCount: attemptNo },
+      data: {
+        status: dead ? 'DEAD' : 'FAILED_RETRYING',
+        attemptCount: attemptNo,
+      },
     });
-    return 'FAILED';
+    return dead ? 'DEAD' : 'FAILED';
   }
 }

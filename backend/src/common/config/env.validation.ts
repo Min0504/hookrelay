@@ -47,6 +47,21 @@ class EnvSchema {
   @Transform(({ value }) => parseInt(String(value), 10))
   @IsInt()
   HR_WORKER_CONCURRENCY: number = 10;
+
+  /** 재시도 지수 백오프 base(ms) — 첫 재시도 상한 */
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_RETRY_BASE_MS: number = 30_000;
+
+  /** 재시도 지연 상한(ms) — 4시간 */
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_RETRY_CAP_MS: number = 4 * 60 * 60 * 1000;
+
+  /** 최대 시도 횟수 — 초과 시 DEAD(DLQ) */
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_MAX_ATTEMPTS: number = 8;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvSchema {

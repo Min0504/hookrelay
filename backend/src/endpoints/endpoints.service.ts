@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Endpoint } from '@prisma/client';
+import { randomUUID } from 'crypto';
 import { generateEndpointSecret } from '../api-keys/api-key.util';
 import { SecretCipher } from '../common/crypto/secret-cipher';
 import { Errors } from '../common/errors/errors';
@@ -96,6 +97,34 @@ export class EndpointsService {
     ]);
 
     return { endpointId: id, eventTypes: unique.sort() };
+  }
+
+  /**
+   * 연동 확인용 ping — 구독과 무관하게 이 endpoint 한 곳으로만 테스트 이벤트를 보낸다.
+   * 발행 경로와 같이 outbox에만 쓰고 큐는 만지지 않는다.
+   */
+  async ping(tenantId: string, endpointId: string) {
+    const endpoint = await this.findScoped(tenantId, endpointId);
+    const eventId = randomUUID();
+    const deliveryId = randomUUID();
+    await this.prisma.$transaction([
+      this.prisma.event.create({
+        data: {
+          id: eventId,
+          tenantId,
+          type: 'endpoint.ping',
+          payload: { ping: true, endpointId },
+          idempotencyKey: `ping:${deliveryId}`,
+        },
+      }),
+      this.prisma.delivery.create({
+        data: { id: deliveryId, eventId, endpointId: endpoint.id },
+      }),
+      this.prisma.outboxMessage.create({
+        data: { eventId, deliveryId },
+      }),
+    ]);
+    return { eventId, deliveryId, endpointId: endpoint.id };
   }
 
   private async findScoped(tenantId: string, id: string): Promise<Endpoint> {

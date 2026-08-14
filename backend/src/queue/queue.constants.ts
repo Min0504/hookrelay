@@ -14,7 +14,7 @@ export interface DeliveryJobData {
  * 중복 잡을 큐 레벨에서 흡수한다. 잡이 이미 소비·제거된 뒤의 재적재는 막지 못하므로
  * best-effort — 최종 방어는 수신자의 X-Delivery-Id 멱등 처리다.
  */
-export function deliveryJobId(deliveryId: string): string {
+export function deliveryJobId(deliveryId: string, suffix?: string): string {
   // BullMQ는 커스텀 jobId에 ':'를 허용하지 않는다(내부 키 구분자와 충돌)
-  return `dlv-${deliveryId}`;
+  return suffix ? `dlv-${deliveryId}-${suffix}` : `dlv-${deliveryId}`;
 }

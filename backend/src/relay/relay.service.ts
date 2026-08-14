@@ -65,10 +65,18 @@ export class RelayService implements OnApplicationShutdown {
     for (const message of batch) {
       try {
         await this.queue.addBulk(
-          message.event.deliveries.map((delivery) => ({
+          this.targetsOf(message).map((deliveryId) => ({
             name: 'deliver',
-            data: { deliveryId: delivery.id },
-            opts: { jobId: deliveryJobId(delivery.id) },
+            data: { deliveryId },
+            opts: {
+              jobId: message.deliveryId
+                ? deliveryJobId(deliveryId, `obx-${message.id}`)
+                : deliveryJobId(deliveryId),
+              attempts: this.config.get<number>('HR_MAX_ATTEMPTS', 8),
+              backoff: { type: 'custom' },
+              removeOnComplete: true,
+              removeOnFail: true,
+            },
           })),
         );
         publishedIds.push(message.id);
@@ -86,6 +94,12 @@ export class RelayService implements OnApplicationShutdown {
       data: { status: 'PUBLISHED', publishedAt: new Date() },
     });
     return publishedIds.length;
+  }
+
+  /** 최초 발행은 이벤트 팬아웃, 재배달/ping은 지정된 배달 한 건만. */
+  private targetsOf(message: { deliveryId: string | null; event: { deliveries: { id: string }[] } }): string[] {
+    if (message.deliveryId) return [message.deliveryId];
+    return message.event.deliveries.map((d) => d.id);
   }
 
   async onApplicationShutdown(): Promise<void> {
