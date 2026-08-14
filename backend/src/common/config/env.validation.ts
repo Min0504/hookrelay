@@ -92,6 +92,20 @@ class EnvSchema {
   @Transform(({ value }) => parseInt(String(value), 10))
   @IsInt()
   HR_CIRCUIT_DISABLE_AFTER: number = 50;
+
+  /** 발행 rate limit (분당). 0이면 비활성 — 테스트 기본. Redis 다운 시 fail-open */
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_RATE_LIMIT_FREE_PER_MIN: number = 60;
+
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_RATE_LIMIT_PRO_PER_MIN: number = 600;
+
+  /** Worker/Relay 전용 /metrics 포트. 0이면 열지 않음. API는 PORT의 /metrics 사용 */
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_METRICS_PORT: number = 0;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvSchema {

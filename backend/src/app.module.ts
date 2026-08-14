@@ -7,6 +7,7 @@ import { PrismaModule } from './common/prisma/prisma.module';
 import { DeliveriesModule } from './deliveries/deliveries.module';
 import { EndpointsModule } from './endpoints/endpoints.module';
 import { EventsModule } from './events/events.module';
+import { MetricsModule } from './metrics/metrics.module';
 import { TenantsModule } from './tenants/tenants.module';
 
 @Module({
@@ -26,6 +27,7 @@ import { TenantsModule } from './tenants/tenants.module';
       },
     }),
     PrismaModule,
+    MetricsModule,
     TenantsModule,
     ApiKeysModule,
     EndpointsModule,

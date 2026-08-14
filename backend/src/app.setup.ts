@@ -1,5 +1,6 @@
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { GlobalExceptionFilter } from './common/errors/global-exception.filter';
+import { HttpMetricsInterceptor } from './metrics/http.interceptor';
 
 /** main과 E2E 테스트가 같은 앱 구성을 쓰도록 분리한 공통 셋업. */
 export function setupApp(app: INestApplication): INestApplication {
@@ -11,5 +12,6 @@ export function setupApp(app: INestApplication): INestApplication {
     }),
   );
   app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalInterceptors(new HttpMetricsInterceptor());
   return app;
 }

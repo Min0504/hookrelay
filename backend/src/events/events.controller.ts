@@ -2,13 +2,18 @@ import { Body, Controller, Get, Headers, HttpCode, Param, ParseUUIDPipe, Post, U
 import { ApiKeyGuard, AuthenticatedTenant } from '../auth/api-key.guard';
 import { CurrentTenant } from '../auth/current-tenant.decorator';
 import { Errors } from '../common/errors/errors';
+import { eventsPublishedTotal } from '../metrics/registry';
 import { PublishEventDto } from './dto/publish-event.dto';
 import { EventsService } from './events.service';
+import { PublishRateLimiter } from './publish-rate-limiter';
 
 @Controller('events')
 @UseGuards(ApiKeyGuard)
 export class EventsController {
-  constructor(private readonly events: EventsService) {}
+  constructor(
+    private readonly events: EventsService,
+    private readonly rateLimiter: PublishRateLimiter,
+  ) {}
 
   /**
    * 202 Accepted — 배달은 비동기다. "접수 완료"와 "배달 완료"는 다른 사건이므로
@@ -16,7 +21,7 @@ export class EventsController {
    */
   @Post()
   @HttpCode(202)
-  publish(
+  async publish(
     @CurrentTenant() tenant: AuthenticatedTenant,
     @Body() dto: PublishEventDto,
     @Headers('idempotency-key') idempotencyKey?: string,
@@ -24,7 +29,10 @@ export class EventsController {
     if (!idempotencyKey || idempotencyKey.trim().length === 0 || idempotencyKey.length > 255) {
       throw Errors.idempotencyKeyRequired();
     }
-    return this.events.publish(tenant.id, dto, idempotencyKey);
+    await this.rateLimiter.consume(tenant.id, tenant.plan);
+    const result = await this.events.publish(tenant.id, dto, idempotencyKey);
+    eventsPublishedTotal.inc();
+    return result;
   }
 
   @Get(':id/deliveries')
