@@ -158,8 +158,41 @@ model Delivery {
   createdAt    DateTime       @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt    DateTime       @updatedAt @map("updated_at") @db.Timestamptz(6)
 
+  attempts DeliveryAttempt[]
+
   // 팬아웃 중복 생성 차단
   @@unique([eventId, endpointId])
   @@index([endpointId, status])
   @@map("deliveries")
+}
+
+enum AttemptErrorClass {
+  TIMEOUT
+  CONN_REFUSED
+  HTTP_4XX
+  HTTP_5XX
+  SSRF_BLOCKED
+}
+
+// 시도 이력 — 불변, 시도당 1행. "시도 전 INSERT(claim) → 결과 UPDATE" 2단계로 기록해
+// 워커가 시도 후 기록 전에 죽어도 중복 시도를 이력에서 식별할 수 있다(결과 없는 행).
+model DeliveryAttempt {
+  id         BigInt   @id @default(autoincrement())
+  deliveryId String   @map("delivery_id") @db.Uuid
+  delivery   Delivery @relation(fields: [deliveryId], references: [id])
+  attemptNo  Int      @map("attempt_no")
+
+  // 전송 증빙 — 서명 포함 헤더의 SHA-256 (시크릿·본문 원문은 저장하지 않는다)
+  requestHeadersDigest String @map("request_headers_digest") @db.Char(64)
+
+  responseStatus   Int?               @map("response_status")
+  // 응답 본문 앞 1KB만 — 디버깅에 충분하고 이력 테이블 비대화를 막는다
+  responseBodyHead String?            @map("response_body_head") @db.VarChar(1024)
+  errorClass       AttemptErrorClass? @map("error_class")
+  durationMs       Int?               @map("duration_ms")
+  attemptedAt      DateTime           @default(now()) @map("attempted_at") @db.Timestamptz(6)
+
+  // 같은 시도 번호의 동시 claim을 DB가 차단 — 잡 중복 소비 시 한쪽만 시도한다
+  @@unique([deliveryId, attemptNo])
+  @@map("delivery_attempts")
 }
