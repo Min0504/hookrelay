@@ -175,6 +175,7 @@ enum AttemptErrorClass {
   HTTP_4XX
   HTTP_5XX
   SSRF_BLOCKED
+  CIRCUIT_OPEN
 }
 
 // 시도 이력 — 불변, 시도당 1행. "시도 전 INSERT(claim) → 결과 UPDATE" 2단계로 기록해

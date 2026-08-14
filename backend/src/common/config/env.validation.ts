@@ -62,6 +62,36 @@ class EnvSchema {
   @Transform(({ value }) => parseInt(String(value), 10))
   @IsInt()
   HR_MAX_ATTEMPTS: number = 8;
+
+  /** 테넌트당 동시 배달 상한 — noisy neighbor 격리. 0이면 제한 없음 */
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_TENANT_CONCURRENCY: number = 3;
+
+  /** 슬롯을 못 얻었을 때 잡을 미루는 간격(ms) */
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_TENANT_RETRY_MS: number = 200;
+
+  /** 워커 크래시 시 세마포어 누수 방지 TTL(초) */
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_TENANT_SLOT_TTL_SEC: number = 60;
+
+  /** 서킷: 연속 실패 이 횟수에 OPEN */
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_CIRCUIT_OPEN_AFTER: number = 10;
+
+  /** 서킷 OPEN 유지 시간(ms) — 이후 HALF_OPEN 프로브 1건 */
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_CIRCUIT_COOLDOWN_MS: number = 5 * 60 * 1000;
+
+  /** 서킷: 연속 실패 이 횟수에 endpoint DISABLED_AUTO */
+  @Transform(({ value }) => parseInt(String(value), 10))
+  @IsInt()
+  HR_CIRCUIT_DISABLE_AFTER: number = 50;
 }
 
 export function validateEnv(config: Record<string, unknown>): EnvSchema {
